@@ -14,6 +14,8 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from review_state import write_review_record
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "sources.json"
@@ -1665,12 +1667,14 @@ def write_article_review(review: dict, timestamp: str, run_dir: Path) -> tuple[P
     md_path = run_dir / f"article-review-{timestamp}.md"
     latest_json = OUT_DIR / "article-review-latest.json"
     latest_md = OUT_DIR / "article-review-latest.md"
-    json_text = json.dumps(review, ensure_ascii=False, indent=2)
-    md_text = article_review_to_markdown(review)
-    json_path.write_text(json_text, encoding="utf-8")
-    md_path.write_text(md_text, encoding="utf-8")
-    latest_json.write_text(json_text, encoding="utf-8")
-    latest_md.write_text(md_text, encoding="utf-8")
+    write_review_record(
+        review,
+        latest_json=latest_json,
+        latest_md=latest_md,
+        run_id=timestamp,
+        dated_json=json_path,
+        dated_md=md_path,
+    )
     return json_path, md_path, latest_md
 
 

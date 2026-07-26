@@ -379,6 +379,7 @@ def main() -> int:
     metadata = {
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "timestamp": timestamp,
+        "run_id": timestamp,
         "topic": args.topic,
         "angle": args.angle,
         "audience": audience,
