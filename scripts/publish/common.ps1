@@ -908,3 +908,17 @@ function Invoke-GenericPlatform {
         }
     }
 }
+function Assert-HumanReviewApproved {
+    param([Parameter(Mandatory = $true)]$Context)
+
+    $reviewPath = Join-Path $Context.Root "out\article-review-latest.json"
+    $review = Read-JsonFile $reviewPath
+    $status = [string]$review.review_status
+    if ([string]::IsNullOrWhiteSpace($status) -and $review.human_review) {
+        $status = [string]$review.human_review.status
+    }
+    if ($status -ne "approved") {
+        throw "Human review is not approved. Current status: $status. Use the review page before Draft or Publish mode."
+    }
+    Write-PublishLog $Context "Human review approved; platform sync may continue."
+}

@@ -47,8 +47,8 @@ You can still override these paths with `-Cover16x9` and `-Cover3x4`.
 Modes:
 
 - `DryRun`: reads `platform-pack-latest.html` DOM fields, falls back to `out/platform-pack-latest.json`, opens each platform publish page, and checks login/verification/entry hints. It does not fill, save, or publish.
-- `Draft`: fills the article and platform fields where selectors are confidently found, uploads the requested cover file, selects AI declarations when visible, and saves draft when a safe draft button is found. It never clicks final publish.
-- `Publish`: runs the Draft path first. Before any final publish click, the terminal requires `YES` for that platform.
+- `Draft`: requires `out/article-review-latest.json` to have human review status `approved`, then fills the article and platform fields where selectors are confidently found, uploads the requested cover file, selects AI declarations when visible, and saves draft when a safe draft button is found. It never clicks final publish.
+- `Publish`: also requires human review status `approved`, runs the Draft path first, and before any final publish click the terminal requires `YES` for that platform. Draft mode is the recommended mode when final publishing must remain manual.
 
 Formatting and cover policy:
 
