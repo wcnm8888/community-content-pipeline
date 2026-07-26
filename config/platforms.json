@@ -1,0 +1,68 @@
+{
+  "platforms": {
+    "zhihu": {
+      "name": "知乎",
+      "fields": {
+        "title_max": 50,
+        "topics_count": 3,
+        "summary_max": 120,
+        "cover_ratio": "16:9",
+        "ai_statement": "创作声明选择：包含 AI 辅助创作"
+      },
+      "notes": "标题偏问题意识或明确判断；话题要贴近技术、AI、安全、开发者工具；发布时创作声明选择包含 AI 辅助创作。"
+    },
+    "juejin": {
+      "name": "稀土掘金",
+      "fields": {
+        "category": "人工智能",
+        "tags_count": 3,
+        "summary_max": 100,
+        "cover_ratio": "16:9"
+      },
+      "notes": "分类固定选人工智能；添加标签时优先搜索生成标签，找不到就选人工智能；摘要最多 100 字。"
+    },
+    "csdn": {
+      "name": "CSDN",
+      "fields": {
+        "title_max": 100,
+        "tags_count": 5,
+        "summary_max": 256,
+        "cover_ratio": "16:9",
+        "ai_statement": "创作声明选择：部分由 AI 辅助生成"
+      },
+      "notes": "标题偏技术关键词；摘要最多 256 字；要添加文章标签；创作声明选择部分由 AI 辅助生成。"
+    },
+    "douyin": {
+      "name": "抖音",
+      "fields": {
+        "title_max": 30,
+        "summary_max": 30,
+        "hashtags_count": 5,
+        "cover_ratio": "3:4"
+      },
+      "notes": "文章标题和文章摘要都是 30 字以内；封面使用 3:4；要添加话题。"
+    },
+    "xiaohongshu": {
+      "name": "小红书",
+      "fields": {
+        "title_max": 20,
+        "body_max": 1000,
+        "hashtags_count": 5,
+        "cover_ratio": "3:4",
+        "ai_statement": "内容类型声明选择：笔记包含 AI 合成内容"
+      },
+      "notes": "打开右上角草稿箱中最新一篇，点击一键排版并等待；下一步后在图片编辑添加 3:4 封面；内容类型声明选择笔记包含 AI 合成内容；要添加话题；标题 20 字以内。"
+    },
+    "bilibili": {
+      "name": "B站",
+      "fields": {
+        "title_max": 80,
+        "summary_max": 250,
+        "topics_count": 1,
+        "cover_ratio": "16:9",
+        "ai_statement": "创作声明选择：AI 辅助创作声明"
+      },
+      "notes": "封面需要点击自定义封面后添加；创作声明点击 AI 辅助创作声明；话题只能添加 1 个，搜索不到时选择相关话题中热度最高的一个。"
+    }
+  }
+}

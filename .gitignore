@@ -1,0 +1,13 @@
+.env
+data/
+local-files/
+out/
+site/
+logs/
+.playwright-cli/
+__pycache__/
+*.py[cod]
+*.run-code.js
+*.tmp
+*.bak
+*.log

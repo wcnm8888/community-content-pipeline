@@ -1,0 +1,59 @@
+{
+  "name": "Daily Tech Intelligence",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "10 19 * * *"
+            }
+          ]
+        }
+      },
+      "id": "1c0b0a64-6d44-47de-95fa-a1a6fda5ff01",
+      "name": "Every day 19:10",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8020/run-daily",
+        "sendBody": false,
+        "options": {
+          "timeout": 900000
+        }
+      },
+      "id": "ae8ad0d7-bfea-4bcf-bbff-c578a10135d1",
+      "name": "Generate Daily Digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Every day 19:10": {
+      "main": [
+        [
+          {
+            "node": "Generate Daily Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Shanghai"
+  }
+}

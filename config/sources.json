@@ -1,0 +1,349 @@
+{
+  "profile": {
+    "name": "技术情报日报",
+    "audience": "国内社交平台上的开发者、技术管理者、AI/Agent 创业者、网络工程与安全从业者",
+    "language": "zh-CN",
+    "focus": [
+      "AI",
+      "AI Agent",
+      "LLM 应用开发",
+      "AI coding",
+      "vibe coding",
+      "workflow automation",
+      "AI workflow",
+      "Agent workflow",
+      "RAG",
+      "MCP",
+      "AI eval",
+      "计算机科学",
+      "网络工程",
+      "网络安全",
+      "有价值开源项目",
+      "开发者工具",
+      "云计算与基础设施"
+    ],
+    "preferred_regions": ["US", "EU", "Global"],
+    "avoid": ["纯营销软文", "缺少来源的爆料", "标题党", "不可验证的投资建议"]
+  },
+  "keywords": [
+    "AI",
+    "agent",
+    "agents",
+    "LLM",
+    "model",
+    "OpenAI",
+    "Anthropic",
+    "Claude",
+    "Gemini",
+    "MCP",
+    "model context protocol",
+    "computer use",
+    "coding agent",
+    "code agent",
+    "AI coding",
+    "AI-assisted coding",
+    "vibe coding",
+    "vibecoding",
+    "developer workflow",
+    "workflow automation",
+    "AI workflow",
+    "agent workflow",
+    "multi-agent",
+    "orchestration",
+    "RAG",
+    "retrieval",
+    "vector database",
+    "embedding",
+    "eval",
+    "evaluation",
+    "benchmark",
+    "reasoning",
+    "tool use",
+    "browser use",
+    "sandbox",
+    "cybersecurity",
+    "security",
+    "vulnerability",
+    "CVE",
+    "network",
+    "networking",
+    "Kubernetes",
+    "cloud",
+    "infrastructure",
+    "developer tools",
+    "open source",
+    "GitHub"
+  ],
+  "feeds": [
+    {
+      "name": "OpenAI News",
+      "category": "AI Lab",
+      "url": "https://openai.com/news/rss.xml",
+      "weight": 10
+    },
+    {
+      "name": "Anthropic News",
+      "category": "AI Lab",
+      "url": "https://www.anthropic.com/news/rss.xml",
+      "weight": 10
+    },
+    {
+      "name": "Google DeepMind Blog",
+      "category": "AI Lab",
+      "url": "https://deepmind.google/blog/rss.xml",
+      "weight": 9
+    },
+    {
+      "name": "Google AI Blog",
+      "category": "AI Lab",
+      "url": "https://blog.google/technology/ai/rss/",
+      "weight": 9
+    },
+    {
+      "name": "Google Research Blog",
+      "category": "Research",
+      "url": "https://research.google/blog/rss/",
+      "weight": 8
+    },
+    {
+      "name": "Microsoft Research Blog",
+      "category": "Research",
+      "url": "https://www.microsoft.com/en-us/research/feed/",
+      "weight": 8
+    },
+    {
+      "name": "Hugging Face Blog",
+      "category": "AI Engineering",
+      "url": "https://huggingface.co/blog/feed.xml",
+      "weight": 8
+    },
+    {
+      "name": "LangChain Blog",
+      "category": "AI Agent",
+      "url": "https://www.langchain.com/blog/rss.xml",
+      "weight": 8
+    },
+    {
+      "name": "LangChain Changelog",
+      "category": "AI Agent",
+      "url": "https://changelog.langchain.com/feed.xml",
+      "weight": 7
+    },
+    {
+      "name": "Sourcegraph Blog",
+      "category": "AI Coding",
+      "url": "https://sourcegraph.com/blog/rss.xml",
+      "weight": 8
+    },
+    {
+      "name": "JetBrains AI Blog",
+      "category": "AI Coding",
+      "url": "https://blog.jetbrains.com/ai/feed/",
+      "weight": 7
+    },
+    {
+      "name": "n8n Blog",
+      "category": "AI Workflow",
+      "url": "https://blog.n8n.io/rss/",
+      "weight": 7
+    },
+    {
+      "name": "Vercel Blog",
+      "category": "AI Engineering",
+      "url": "https://vercel.com/atom",
+      "weight": 7
+    },
+    {
+      "name": "Replicate Blog",
+      "category": "AI Engineering",
+      "url": "https://replicate.com/blog/rss",
+      "weight": 7
+    },
+    {
+      "name": "Instant Blog",
+      "category": "Developer Workflow",
+      "url": "https://www.instantdb.com/rss.xml",
+      "weight": 6
+    },
+    {
+      "name": "Simon Willison",
+      "category": "AI Engineering",
+      "url": "https://simonwillison.net/atom/everything/",
+      "weight": 8
+    },
+    {
+      "name": "Latent Space",
+      "category": "AI Engineering",
+      "url": "https://www.latent.space/feed",
+      "weight": 7
+    },
+    {
+      "name": "arXiv cs.AI",
+      "category": "Research",
+      "url": "http://export.arxiv.org/rss/cs.AI",
+      "weight": 7
+    },
+    {
+      "name": "arXiv cs.CL",
+      "category": "Research",
+      "url": "http://export.arxiv.org/rss/cs.CL",
+      "weight": 7
+    },
+    {
+      "name": "Hacker News Front Page",
+      "category": "Tech Community",
+      "url": "https://hnrss.org/frontpage",
+      "weight": 8
+    },
+    {
+      "name": "Hacker News Newest",
+      "category": "Tech Community",
+      "url": "https://hnrss.org/newest",
+      "weight": 6
+    },
+    {
+      "name": "GitHub Blog",
+      "category": "Developer Tools",
+      "url": "https://github.blog/feed/",
+      "weight": 7
+    },
+    {
+      "name": "The GitHub Blog - Engineering",
+      "category": "Developer Tools",
+      "url": "https://github.blog/engineering/feed/",
+      "weight": 8
+    },
+    {
+      "name": "GitHub Changelog",
+      "category": "Developer Tools",
+      "url": "https://github.blog/changelog/feed/",
+      "weight": 7
+    },
+    {
+      "name": "Stack Overflow Blog",
+      "category": "Developer Tools",
+      "url": "https://stackoverflow.blog/feed/",
+      "weight": 6
+    },
+    {
+      "name": "Docker Blog",
+      "category": "Developer Tools",
+      "url": "https://www.docker.com/blog/feed/",
+      "weight": 7
+    },
+    {
+      "name": "Kubernetes Blog",
+      "category": "Cloud Native",
+      "url": "https://kubernetes.io/feed.xml",
+      "weight": 7
+    },
+    {
+      "name": "CNCF Blog",
+      "category": "Cloud Native",
+      "url": "https://www.cncf.io/feed/",
+      "weight": 6
+    },
+    {
+      "name": "Cloudflare Blog",
+      "category": "Network Engineering",
+      "url": "https://blog.cloudflare.com/rss/",
+      "weight": 8
+    },
+    {
+      "name": "APNIC Blog",
+      "category": "Network Engineering",
+      "url": "https://blog.apnic.net/feed/",
+      "weight": 7
+    },
+    {
+      "name": "Krebs on Security",
+      "category": "Security",
+      "url": "https://krebsonsecurity.com/feed/",
+      "weight": 8
+    },
+    {
+      "name": "Schneier on Security",
+      "category": "Security",
+      "url": "https://www.schneier.com/feed/atom/",
+      "weight": 7
+    },
+    {
+      "name": "The Hacker News",
+      "category": "Security",
+      "url": "https://feeds.feedburner.com/TheHackersNews",
+      "weight": 7
+    },
+    {
+      "name": "Google Security Blog",
+      "category": "Security",
+      "url": "https://security.googleblog.com/feeds/posts/default",
+      "weight": 8
+    },
+    {
+      "name": "Google Project Zero",
+      "category": "Security",
+      "url": "https://googleprojectzero.blogspot.com/feeds/posts/default",
+      "weight": 9
+    },
+    {
+      "name": "CISA Cybersecurity Advisories",
+      "category": "Security",
+      "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
+      "weight": 8
+    },
+    {
+      "name": "SANS Internet Storm Center",
+      "category": "Security",
+      "url": "https://isc.sans.edu/rssfeed.xml",
+      "weight": 7
+    },
+    {
+      "name": "Trail of Bits Blog",
+      "category": "Security Engineering",
+      "url": "https://blog.trailofbits.com/feed/",
+      "weight": 8
+    },
+    {
+      "name": "Unit 42",
+      "category": "Security",
+      "url": "https://unit42.paloaltonetworks.com/feed/",
+      "weight": 7
+    },
+    {
+      "name": "Cisco Talos Blog",
+      "category": "Security",
+      "url": "https://blog.talosintelligence.com/rss/",
+      "weight": 7
+    },
+    {
+      "name": "AWS News Blog",
+      "category": "Cloud",
+      "url": "https://aws.amazon.com/blogs/aws/feed/",
+      "weight": 7
+    },
+    {
+      "name": "AWS Machine Learning Blog",
+      "category": "AI Engineering",
+      "url": "https://aws.amazon.com/blogs/machine-learning/feed/",
+      "weight": 7
+    },
+    {
+      "name": "AWS Architecture Blog",
+      "category": "Cloud",
+      "url": "https://aws.amazon.com/blogs/architecture/feed/",
+      "weight": 7
+    },
+    {
+      "name": "Microsoft Azure Blog",
+      "category": "Cloud",
+      "url": "https://azure.microsoft.com/en-us/blog/feed/",
+      "weight": 6
+    },
+    {
+      "name": "Netflix Tech Blog",
+      "category": "Engineering",
+      "url": "https://netflixtechblog.com/feed",
+      "weight": 7
+    }
+  ]
+}
