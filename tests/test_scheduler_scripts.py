@@ -26,6 +26,12 @@ class SchedulerScriptTests(unittest.TestCase):
         self.assertIn("The key value was not displayed", content)
         self.assertNotIn("Write-Output $Matches[2]", content)
 
+    def test_publish_browser_state_handles_non_json_and_page_errors(self):
+        content = (ROOT / "scripts" / "publish" / "common.ps1").read_text(encoding="utf-8")
+        self.assertIn("returned a non-JSON result", content)
+        self.assertIn("const result = {", content)
+        self.assertIn("result.errors.push('page state: ' + error.message)", content)
+
 
 if __name__ == "__main__":
     unittest.main()

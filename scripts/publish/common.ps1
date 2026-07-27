@@ -172,8 +172,15 @@ function Invoke-BrowserFunction {
         if ([string]::IsNullOrWhiteSpace($raw)) {
             return $null
         }
-        $parsed = $raw | ConvertFrom-Json
+        $trimmed = $raw.Trim()
+        if ($trimmed -notmatch '^[\[{\"]') {
+            throw "playwright-cli returned a non-JSON result: $(Protect-LogText $trimmed)"
+        }
+        $parsed = $trimmed | ConvertFrom-Json
         if ($parsed -is [string]) {
+            if ($parsed.Trim() -notmatch '^[\[{\"]') {
+                throw "browser function returned a non-JSON payload: $(Protect-LogText $parsed)"
+            }
             return ($parsed | ConvertFrom-Json)
         }
         return $parsed
@@ -471,24 +478,27 @@ function Test-PlatformPageState {
     $js = @'
 async page => {
   const entryHints = __ENTRY_HINTS__;
-  await page.waitForLoadState('domcontentloaded').catch(() => {});
-  await page.waitForTimeout(2000);
-  const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
-  const limited = bodyText.slice(0, 20000);
-  const challengePatterns = ['验证码','扫码','二维码','短信验证','安全验证','滑块','拖动滑块','captcha','verify','verification','risk control'];
-  const loginPatterns = ['登录','登陆','Sign in','Log in','login','未登录'];
-  const challengeTerms = challengePatterns.filter(term => limited.toLowerCase().includes(term.toLowerCase()));
-  const loginTerms = loginPatterns.filter(term => limited.toLowerCase().includes(term.toLowerCase()));
-  const entryTerms = entryHints.filter(term => limited.includes(term));
-  const buttons = await page.locator('button, [role=button], a').evaluateAll(nodes => nodes.slice(0, 80).map(node => (node.innerText || node.textContent || '').trim()).filter(Boolean)).catch(() => []);
-  return JSON.stringify({
-    url: page.url(),
-    title: await page.title().catch(() => ''),
-    challengeTerms,
-    loginTerms,
-    entryTerms,
-    buttonCount: buttons.length
-  });
+  const result = {
+    url: '', title: '', challengeTerms: [], loginTerms: [], entryTerms: [], buttonCount: 0, errors: []
+  };
+  try { result.url = page.url(); } catch (error) { result.errors.push('url: ' + error.message); }
+  try { result.title = await page.title(); } catch (error) { result.errors.push('title: ' + error.message); }
+  try {
+    await page.waitForLoadState('domcontentloaded').catch(() => {});
+    await page.waitForTimeout(2000);
+    const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
+    const limited = bodyText.slice(0, 20000);
+    const challengePatterns = ['验证码','扫码','二维码','短信验证','安全验证','滑块','拖动滑块','captcha','verify','verification','risk control'];
+    const loginPatterns = ['登录','登陆','Sign in','Log in','login','未登录'];
+    result.challengeTerms = challengePatterns.filter(term => limited.toLowerCase().includes(term.toLowerCase()));
+    result.loginTerms = loginPatterns.filter(term => limited.toLowerCase().includes(term.toLowerCase()));
+    result.entryTerms = entryHints.filter(term => limited.includes(term));
+    const buttons = await page.locator('button, [role=button], a').evaluateAll(nodes => nodes.slice(0, 80).map(node => (node.innerText || node.textContent || '').trim()).filter(Boolean)).catch(() => []);
+    result.buttonCount = buttons.length;
+  } catch (error) {
+    result.errors.push('page state: ' + error.message);
+  }
+  return JSON.stringify(result);
 }
 '@
     $js = $js.Replace("__ENTRY_HINTS__", $entryHints)
