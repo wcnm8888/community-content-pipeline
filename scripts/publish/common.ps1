@@ -908,3 +908,34 @@ function Invoke-GenericPlatform {
         }
     }
 }
+function Assert-HumanReviewApproved {
+    param([Parameter(Mandatory = $true)]$Context)
+
+    $reviewPath = Join-Path $Context.Root "out\article-review-latest.json"
+    $review = Read-JsonFile $reviewPath
+    $status = [string]$review.review_status
+    if ([string]::IsNullOrWhiteSpace($status) -and $review.human_review) {
+        $status = [string]$review.human_review.status
+    }
+    if ($status -ne "approved") {
+        throw "Human review is not approved. Current status: $status. Use the review page before Draft or Publish mode."
+    }
+    Write-PublishLog $Context "Human review approved; platform sync may continue."
+}
+
+function Assert-PlatformReviewApproved {
+    param(
+        [Parameter(Mandatory = $true)]$Context,
+        [Parameter(Mandatory = $true)][string[]]$Platforms
+    )
+
+    $reviewPath = Join-Path $Context.Root "out\platform-review-latest.json"
+    $review = Read-JsonFile $reviewPath
+    foreach ($platform in $Platforms) {
+        $item = $review.platforms.$platform
+        if (-not $item -or [string]$item.status -ne "approved") {
+            throw "Platform review is not approved for $platform. Current status: $([string]$item.status)."
+        }
+    }
+    Write-PublishLog $Context "Requested platform versions are human-approved; sync may continue."
+}

@@ -26,6 +26,10 @@ from daily_digest import (
     write_cover_prompt,
     write_platform_pack,
 )
+from run_manifest import RunManifest
+
+
+CURRENT_MANIFEST: RunManifest | None = None
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -324,6 +328,7 @@ def main() -> int:
     parser.add_argument("--audience", default="")
     parser.add_argument("--top-results", type=int, default=8)
     parser.add_argument("--reader-timeout", type=int, default=18)
+    parser.add_argument("--retry-of", default=None, help="关联一次失败运行的 run_id，不改变正常输出流程")
     parser.add_argument("--urls", nargs="*")
     args = parser.parse_args()
 
@@ -336,49 +341,62 @@ def main() -> int:
     run_dir = OUT_DIR / time.strftime("%Y-%m-%d")
     run_dir.mkdir(parents=True, exist_ok=True)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
+    global CURRENT_MANIFEST
+    manifest = RunManifest(run_dir, "knowledge_share", timestamp, retry_of=args.retry_of)
+    CURRENT_MANIFEST = manifest
 
-    candidates = manual_candidates(urls)
+    candidates = manifest.run_stage("source_candidates", lambda: manual_candidates(urls))
     if len(candidates) < args.top_results:
         try:
-            candidates.extend(search_sources(env, args.topic, args.angle, args.top_results))
+            candidates.extend(manifest.run_stage("source_search", lambda: search_sources(
+                env, args.topic, args.angle, args.top_results
+            )))
         except RuntimeError as exc:
             if not candidates:
                 raise RuntimeError(f"{exc} You can run manual mode with --urls https://example.com") from exc
+            manifest.skip_stage("source_search", str(exc))
             log(f"WARN search skipped: {exc}")
     candidates = dedupe_candidates(candidates)[: args.top_results]
     if not candidates:
         raise RuntimeError("No usable sources. Configure search API or pass at least one URL with --urls.")
 
-    readable = read_sources(candidates, env, args.reader_timeout)
+    readable = manifest.run_stage("reader", lambda: read_sources(candidates, env, args.reader_timeout))
     if not readable:
         raise RuntimeError("No readable sources after Jina Reader extraction.")
 
-    cards_payload, source_items = build_material_cards(readable, timestamp)
+    cards_payload, source_items = manifest.run_stage("material_cards", lambda: build_material_cards(readable, timestamp))
     prompt = build_knowledge_prompt(args.topic, args.angle, audience, cards_payload, source_items)
     log("Generating knowledge share article with DeepSeek...")
-    article = sanitize_article(deepseek_chat(env, prompt, system_prompt=PROMPT_PATH.read_text(encoding="utf-8")))
-    article, review = review_and_improve_article(
-        article,
-        env,
-        {"selected_for_reader": [
-            {
-                "title": item.title,
-                "source": item.source,
-                "content_type": item.content_type,
-                "score": item.score,
-                "editorial_score": item.editorial_score,
-                "editorial_breakdown": {"caution_flags": []},
-            }
-            for item in source_items
-        ]},
-        source_items,
-        content_kind="knowledge_share",
-        rewrite_system_prompt=PROMPT_PATH.read_text(encoding="utf-8"),
+    article = manifest.run_stage(
+        "article_generation",
+        lambda: sanitize_article(deepseek_chat(env, prompt, system_prompt=PROMPT_PATH.read_text(encoding="utf-8"))),
+    )
+    article, review = manifest.run_stage(
+        "article_review",
+        lambda: review_and_improve_article(
+            article,
+            env,
+            {"selected_for_reader": [
+                {
+                    "title": item.title,
+                    "source": item.source,
+                    "content_type": item.content_type,
+                    "score": item.score,
+                    "editorial_score": item.editorial_score,
+                    "editorial_breakdown": {"caution_flags": []},
+                }
+                for item in source_items
+            ]},
+            source_items,
+            content_kind="knowledge_share",
+            rewrite_system_prompt=PROMPT_PATH.read_text(encoding="utf-8"),
+        ),
     )
 
     metadata = {
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "timestamp": timestamp,
+        "run_id": timestamp,
         "topic": args.topic,
         "angle": args.angle,
         "audience": audience,
@@ -390,10 +408,18 @@ def main() -> int:
             "safe_to_sync": review.get("safe_to_sync"),
         },
     }
-    json_path, md_path, latest_json, latest_md = write_knowledge_outputs(article, metadata, timestamp, run_dir)
-    review_json_path, review_md_path, review_latest_path = write_article_review(review, timestamp, run_dir)
-    cover_path = write_cover_prompt(article, timestamp, run_dir)
-    platform_json_path, platform_md_path, platform_latest_path = write_platform_pack(article, env, timestamp, run_dir)
+    json_path, md_path, latest_json, latest_md = manifest.run_stage(
+        "article_output", lambda: write_knowledge_outputs(article, metadata, timestamp, run_dir)
+    )
+    review_json_path, review_md_path, review_latest_path = manifest.run_stage(
+        "review_output", lambda: write_article_review(review, timestamp, run_dir)
+    )
+    cover_path = manifest.run_stage("cover_prompt", lambda: write_cover_prompt(article, timestamp, run_dir))
+    platform_json_path, platform_md_path, platform_latest_path = manifest.run_stage(
+        "platform_pack", lambda: write_platform_pack(article, env, timestamp, run_dir)
+    )
+
+    manifest.finish("succeeded")
 
     log("Knowledge share saved:")
     log(str(md_path))
@@ -418,5 +444,7 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:
+        if CURRENT_MANIFEST is not None:
+            CURRENT_MANIFEST.fail_run(exc)
         print(f"ERROR: {exc}", file=sys.stderr)
         raise SystemExit(1)

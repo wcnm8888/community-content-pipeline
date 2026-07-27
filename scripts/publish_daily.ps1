@@ -100,6 +100,11 @@ if ($Mode -eq "Publish") {
     Write-PublishLog $context "Publish mode is enabled. Each platform still requires typing YES before final publish." "WARN"
 }
 
+if ($Mode -ne "DryRun") {
+    Assert-HumanReviewApproved $context
+    Assert-PlatformReviewApproved $context $requestedPlatforms
+}
+
 Ensure-PublishBrowser $context
 $pack = Get-PlatformPack $context
 

@@ -33,6 +33,15 @@ def render_findings(findings: list[dict]) -> str:
     )
 
 
+def review_status_label(status: str) -> str:
+    return {
+        "pending": "待人工审核",
+        "approved": "人工通过",
+        "revision_requested": "要求修改",
+        "rejected": "人工驳回",
+    }.get(status, "待人工审核")
+
+
 def main() -> int:
     source = OUT_DIR / "article-review-latest.json"
     if not source.exists():
@@ -42,6 +51,10 @@ def main() -> int:
     SITE_DIR.mkdir(parents=True, exist_ok=True)
     score = int(review.get("quality_score", 0) or 0)
     status_class = "good" if review.get("safe_to_sync") else "warn"
+    human_review = review.get("human_review") or {}
+    human_status = str(human_review.get("status", "pending"))
+    run_id = str(review.get("run_id", ""))
+    review_payload = json.dumps({"run_id": run_id}, ensure_ascii=False)
 
     page = f"""<!doctype html>
 <html lang="zh-CN">
@@ -140,6 +153,38 @@ def main() -> int:
     .ok {{
       color: #1a7f37;
     }}
+    .review-actions {{
+      display: grid;
+      gap: 10px;
+    }}
+    textarea {{
+      width: 100%;
+      min-height: 90px;
+      box-sizing: border-box;
+      border: 1px solid #d8dee4;
+      border-radius: 6px;
+      padding: 10px;
+      font: inherit;
+      resize: vertical;
+    }}
+    .buttons {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }}
+    button {{
+      border: 0;
+      border-radius: 6px;
+      padding: 9px 14px;
+      color: #fff;
+      background: #0969da;
+      cursor: pointer;
+      font: inherit;
+    }}
+    button.warn {{ background: #bf8700; }}
+    button.danger {{ background: #cf222e; }}
+    button:disabled {{ opacity: .6; cursor: wait; }}
+    .notice {{ min-height: 22px; color: #57606a; }}
   </style>
 </head>
 <body>
@@ -152,6 +197,18 @@ def main() -> int:
       <div class="metric {status_class}">建议同步<strong>{render_bool(review.get('safe_to_sync'))}</strong></div>
       <div class="metric">已自动改写<strong>{render_bool(review.get('revision_applied'))}</strong></div>
     </div>
+    <section class="panel review-actions">
+      <h2>人工审核</h2>
+      <p>当前状态：<strong id="human-status">{html.escape(review_status_label(human_status))}</strong></p>
+      <p>运行 ID：<code>{html.escape(run_id)}</code></p>
+      <textarea id="review-note" placeholder="填写审核意见（可选）">{html.escape(str(human_review.get('note', '')))}</textarea>
+      <div class="buttons">
+        <button data-status="approved">人工通过</button>
+        <button class="warn" data-status="revision_requested">要求修改</button>
+        <button class="danger" data-status="rejected">人工驳回</button>
+      </div>
+      <div class="notice" id="review-notice"></div>
+    </section>
     <section class="panel">
       <h2>总评</h2>
       <p>{html.escape(str(review.get('summary', '')))}</p>
@@ -161,6 +218,33 @@ def main() -> int:
     <h2>自动改写后仍需人工注意</h2>
     {render_findings(review.get('post_revision_findings', []))}
   </main>
+  <script>
+    const reviewContext = {review_payload};
+    const statusLabels = {{ approved: '人工通过', revision_requested: '要求修改', rejected: '人工驳回' }};
+    const notice = document.querySelector('#review-notice');
+    document.querySelectorAll('button[data-status]').forEach((button) => {{
+      button.addEventListener('click', async () => {{
+        const note = document.querySelector('#review-note').value;
+        document.querySelectorAll('button[data-status]').forEach((item) => item.disabled = true);
+        notice.textContent = '正在保存审核结果...';
+        try {{
+          const response = await fetch('http://localhost:8020/review', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{ ...reviewContext, status: button.dataset.status, note }})
+          }});
+          const payload = await response.json();
+          if (!response.ok || !payload.ok) throw new Error(payload.error || '保存失败');
+          document.querySelector('#human-status').textContent = statusLabels[button.dataset.status];
+          notice.textContent = '已保存：' + statusLabels[button.dataset.status];
+        }} catch (error) {{
+          notice.textContent = '保存失败：' + error.message;
+        }} finally {{
+          document.querySelectorAll('button[data-status]').forEach((item) => item.disabled = false);
+        }}
+      }});
+    }});
+  </script>
 </body>
 </html>
 """

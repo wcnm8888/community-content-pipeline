@@ -4,6 +4,13 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+try:
+    from .review_state import update_review_files
+    from .platform_review import update_platform_review as persist_platform_review
+except ImportError:
+    from review_state import update_review_files
+    from platform_review import update_platform_review as persist_platform_review
+
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
@@ -28,9 +35,19 @@ class Handler(BaseHTTPRequestHandler):
         body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "http://localhost:8010")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "http://localhost:8010")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
 
     def do_GET(self) -> None:
         if self.path == "/health":
@@ -48,6 +65,12 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(raw)
 
     def do_POST(self) -> None:
+        if self.path == "/review":
+            self.update_review()
+            return
+        if self.path == "/platform-review":
+            self.update_platform_review()
+            return
         if self.path == "/run-knowledge":
             self.run_knowledge()
             return
@@ -131,6 +154,75 @@ class Handler(BaseHTTPRequestHandler):
                     "output": (exc.stdout or "")[-8000:] if isinstance(exc.stdout, str) else "",
                 },
             )
+        except Exception as exc:
+            self.send_json(500, {"ok": False, "error": str(exc)})
+
+    def update_review(self) -> None:
+        try:
+            body = self.read_json_body()
+            status = str(body.get("status", "")).strip()
+            note = str(body.get("note", ""))
+            run_id = str(body.get("run_id", "")).strip()
+            if not status:
+                self.send_json(400, {"ok": False, "error": "status is required"})
+                return
+            review = update_review_files(ROOT / "out", status, note, run_id)
+            platform_generation = None
+            if status == "approved":
+                generation_code, generation_out = run_command(
+                    [PYTHON, "scripts/generate_platform_versions.py", "--run-id", str(review.get("run_id", ""))],
+                    timeout=1200,
+                )
+                platform_generation = {"exit_code": generation_code, "output": generation_out[-6000:]}
+                if generation_code != 0:
+                    self.send_json(500, {"ok": False, "review_saved": True, "error": "article approved but platform generation failed", "platform_generation": platform_generation})
+                    return
+            render_code, render_out = run_command(
+                [PYTHON, "scripts/render_article_review_html.py"],
+                timeout=60,
+            )
+            if status == "approved":
+                render_code, render_out = run_command([PYTHON, "scripts/render_platform_pack_html.py"], timeout=60)
+            if render_code != 0:
+                self.send_json(500, {"ok": False, "error": "review saved but render failed", "output": render_out[-4000:]})
+                return
+            self.send_json(
+                200,
+                {
+                    "ok": True,
+                    "run_id": review.get("run_id", ""),
+                    "review_status": review.get("review_status", ""),
+                    "human_review": review.get("human_review", {}),
+                    "platform_generation": platform_generation,
+                },
+            )
+        except ValueError as exc:
+            self.send_json(409, {"ok": False, "error": str(exc)})
+        except FileNotFoundError as exc:
+            self.send_json(404, {"ok": False, "error": str(exc)})
+        except Exception as exc:
+            self.send_json(500, {"ok": False, "error": str(exc)})
+
+    def update_platform_review(self) -> None:
+        try:
+            body = self.read_json_body()
+            record = persist_platform_review(
+                ROOT / "out",
+                str(body.get("platform", "")).strip(),
+                str(body.get("status", "")).strip(),
+                str(body.get("note", "")),
+                str(body.get("run_id", "")).strip(),
+            )
+            render_code, render_out = run_command([PYTHON, "scripts/render_platform_pack_html.py"], timeout=60)
+            if render_code != 0:
+                self.send_json(500, {"ok": False, "error": "platform review saved but render failed", "output": render_out[-4000:]})
+                return
+            platform = str(body.get("platform", "")).strip()
+            self.send_json(200, {"ok": True, "platform": platform, "platform_review": record["platforms"].get(platform, {}), "overall_status": record["overall_status"]})
+        except ValueError as exc:
+            self.send_json(409, {"ok": False, "error": str(exc)})
+        except FileNotFoundError as exc:
+            self.send_json(404, {"ok": False, "error": str(exc)})
         except Exception as exc:
             self.send_json(500, {"ok": False, "error": str(exc)})
 

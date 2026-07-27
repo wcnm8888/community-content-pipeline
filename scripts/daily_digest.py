@@ -14,6 +14,13 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from run_manifest import RunManifest
+
+from review_state import write_review_record
+
+
+CURRENT_MANIFEST: RunManifest | None = None
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "sources.json"
@@ -1665,12 +1672,14 @@ def write_article_review(review: dict, timestamp: str, run_dir: Path) -> tuple[P
     md_path = run_dir / f"article-review-{timestamp}.md"
     latest_json = OUT_DIR / "article-review-latest.json"
     latest_md = OUT_DIR / "article-review-latest.md"
-    json_text = json.dumps(review, ensure_ascii=False, indent=2)
-    md_text = article_review_to_markdown(review)
-    json_path.write_text(json_text, encoding="utf-8")
-    md_path.write_text(md_text, encoding="utf-8")
-    latest_json.write_text(json_text, encoding="utf-8")
-    latest_md.write_text(md_text, encoding="utf-8")
+    write_review_record(
+        review,
+        latest_json=latest_json,
+        latest_md=latest_md,
+        run_id=timestamp,
+        dated_json=json_path,
+        dated_md=md_path,
+    )
     return json_path, md_path, latest_md
 
 
@@ -1932,6 +1941,7 @@ def main() -> int:
     parser.add_argument("--feed-timeout", type=int, default=12)
     parser.add_argument("--reader-timeout", type=int, default=18)
     parser.add_argument("--pool-size", type=int, default=30)
+    parser.add_argument("--retry-of", default=None, help="关联一次失败运行的 run_id，不改变正常输出流程")
     args = parser.parse_args()
 
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
@@ -1941,11 +1951,14 @@ def main() -> int:
     run_dir = OUT_DIR / run_date
     run_dir.mkdir(parents=True, exist_ok=True)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
+    global CURRENT_MANIFEST
+    manifest = RunManifest(run_dir, "daily_digest", timestamp, retry_of=args.retry_of)
+    CURRENT_MANIFEST = manifest
 
-    items = collect_items(config, args.limit_per_feed, args.feed_timeout)
-    history = load_recent_history(days=7)
-    apply_history_penalties(items, history)
-    items = sorted(items, key=final_rank_score, reverse=True)
+    items = manifest.run_stage("collect", lambda: collect_items(config, args.limit_per_feed, args.feed_timeout))
+    history = manifest.run_stage("dedupe", lambda: load_recent_history(days=7))
+    manifest.run_stage("score", lambda: apply_history_penalties(items, history))
+    items = manifest.run_stage("select", lambda: sorted(items, key=final_rank_score, reverse=True))
     if history:
         log(
             "Loaded recent history: "
@@ -1957,27 +1970,17 @@ def main() -> int:
     if not selected:
         raise RuntimeError("No feed items collected.")
 
-    content_pool, content_pool_json_path, content_pool_md_path, content_pool_latest_path = write_content_pool(
-        items,
-        selected,
-        timestamp,
-        run_dir,
-        args.pool_size,
+    content_pool, content_pool_json_path, content_pool_md_path, content_pool_latest_path = manifest.run_stage(
+        "content_pool", lambda: write_content_pool(items, selected, timestamp, run_dir, args.pool_size)
     )
 
-    enrich_with_reader(selected, env, args.reader_timeout)
-    fact_cards = build_fact_cards(selected, timestamp)
-    fact_cards_json_path, fact_cards_md_path, fact_cards_latest_path = write_fact_cards(
-        fact_cards,
-        timestamp,
-        run_dir,
+    manifest.run_stage("reader", lambda: enrich_with_reader(selected, env, args.reader_timeout))
+    fact_cards = manifest.run_stage("fact_cards", lambda: build_fact_cards(selected, timestamp))
+    fact_cards_json_path, fact_cards_md_path, fact_cards_latest_path = manifest.run_stage(
+        "fact_cards_output", lambda: write_fact_cards(fact_cards, timestamp, run_dir)
     )
-    topic_candidates, topic_json_path, topic_md_path, topic_latest_path = generate_topic_candidates(
-        env,
-        fact_cards,
-        config["profile"],
-        timestamp,
-        run_dir,
+    topic_candidates, topic_json_path, topic_md_path, topic_latest_path = manifest.run_stage(
+        "topic_candidates", lambda: generate_topic_candidates(env, fact_cards, config["profile"], timestamp, run_dir)
     )
 
     gate = topic_candidates.get("gate", {})
@@ -2014,15 +2017,21 @@ def main() -> int:
     else:
         prompt = build_article_prompt(selected, config["profile"], content_pool, fact_cards, topic_candidates)
         log("Generating daily digest with DeepSeek...")
-        article = sanitize_article(deepseek_chat(env, prompt))
-        article, article_review = review_and_improve_article(article, env, content_pool, selected)
+        article = manifest.run_stage("article_generation", lambda: sanitize_article(deepseek_chat(env, prompt)))
+        article, article_review = manifest.run_stage(
+            "article_review", lambda: review_and_improve_article(article, env, content_pool, selected)
+        )
         article_path.write_text(front + article, encoding="utf-8")
         latest_path.write_text(front + article, encoding="utf-8")
         review_json_path, review_md_path, review_latest_path = write_article_review(article_review, timestamp, run_dir)
         cover_path = write_cover_prompt(article, timestamp, run_dir)
         if not article_review.get("safe_to_sync"):
             log("Article review did not recommend sync; generating platform pack for manual review anyway.")
-        platform_json_path, platform_md_path, platform_latest_path = write_platform_pack(article, env, timestamp, run_dir)
+        platform_json_path, platform_md_path, platform_latest_path = manifest.run_stage(
+            "platform_pack", lambda: write_platform_pack(article, env, timestamp, run_dir)
+        )
+
+    manifest.finish("succeeded")
 
     log("Daily digest saved:")
     log(str(article_path))
@@ -2065,5 +2074,7 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:
+        if CURRENT_MANIFEST is not None:
+            CURRENT_MANIFEST.fail_run(exc)
         print(f"ERROR: {exc}", file=sys.stderr)
         raise SystemExit(1)
