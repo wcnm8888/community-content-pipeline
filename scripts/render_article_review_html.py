@@ -60,6 +60,12 @@ def load_latest_article() -> tuple[str, str]:
     return "", ""
 
 
+def latest_article_preview_url(filename: str) -> str:
+    if filename == "knowledge-share-latest.md":
+        return "http://localhost:8010/knowledge-share-latest.html"
+    return "http://localhost:8010/draft-latest.html"
+
+
 def main() -> int:
     source = OUT_DIR / "article-review-latest.json"
     if not source.exists():
@@ -241,7 +247,7 @@ def main() -> int:
     </section>
     <section class="panel">
       <h2>文章正文</h2>
-      <p class="article-link"><a href="http://localhost:8010/draft-latest.html" target="_blank" rel="noreferrer">打开文章预览页面</a> · 当前文件：<code>{html.escape(article_filename)}</code></p>
+      <p class="article-link"><a href="{latest_article_preview_url(article_filename)}" target="_blank" rel="noreferrer">打开文章预览页面</a> · 当前文件：<code>{html.escape(article_filename)}</code></p>
       <div class="article-body">{article_html}</div>
     </section>
     <section class="panel">

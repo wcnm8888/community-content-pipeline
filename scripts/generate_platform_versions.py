@@ -21,6 +21,17 @@ def _article_text(path: Path) -> str:
     return re.sub(r"\A<!--.*?-->\s*", "", text, flags=re.S).strip()
 
 
+def resolve_article_path(review: dict) -> Path:
+    if review.get("content_kind") == "knowledge_share":
+        candidates = (OUT_DIR / "knowledge-share-latest.md", OUT_DIR / "draft-latest.md")
+    else:
+        candidates = (OUT_DIR / "draft-latest.md", OUT_DIR / "knowledge-share-latest.md")
+    for path in candidates:
+        if path.exists():
+            return path
+    raise FileNotFoundError("No latest article draft found")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-id", required=True)
@@ -32,11 +43,7 @@ def main() -> int:
     if review.get("review_status") != "approved":
         raise RuntimeError("Article must be human-approved before platform versions are generated")
 
-    article_path = OUT_DIR / "draft-latest.md"
-    if not article_path.exists():
-        article_path = OUT_DIR / "knowledge-share-latest.md"
-    if not article_path.exists():
-        raise FileNotFoundError("No latest article draft found")
+    article_path = resolve_article_path(review)
     dated_dir = next(iter(OUT_DIR.glob(f"*/article-review-{args.run_id}.json")), None)
     run_dir = dated_dir.parent if dated_dir else OUT_DIR / time.strftime("%Y-%m-%d")
     run_dir.mkdir(parents=True, exist_ok=True)
