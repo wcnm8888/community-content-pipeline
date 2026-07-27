@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,6 +15,8 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
+POWERSHELL = shutil.which("pwsh") or shutil.which("powershell") or "powershell.exe"
+DRYRUN_PLATFORMS = {"zhihu", "juejin", "csdn", "douyin", "xiaohongshu", "bilibili"}
 
 
 def run_command(args: list[str], timeout: int = 900) -> tuple[int, str]:
@@ -73,6 +76,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/run-knowledge":
             self.run_knowledge()
+            return
+        if self.path == "/dryrun":
+            self.run_dryrun()
             return
 
         if self.path != "/run-daily":
@@ -223,6 +229,46 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(409, {"ok": False, "error": str(exc)})
         except FileNotFoundError as exc:
             self.send_json(404, {"ok": False, "error": str(exc)})
+        except Exception as exc:
+            self.send_json(500, {"ok": False, "error": str(exc)})
+
+    def run_dryrun(self) -> None:
+        try:
+            body = self.read_json_body()
+            platform = str(body.get("platform", "")).strip().lower()
+            if platform not in DRYRUN_PLATFORMS:
+                self.send_json(400, {"ok": False, "error": "unsupported platform"})
+                return
+
+            code, output = run_command(
+                [
+                    POWERSHELL,
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(ROOT / "scripts" / "publish_daily.ps1"),
+                    "-Platforms",
+                    platform,
+                    "-Mode",
+                    "DryRun",
+                ],
+                timeout=900,
+            )
+            record_path = ROOT / "out" / "dryrun-latest.json"
+            record = json.loads(record_path.read_text(encoding="utf-8-sig")) if record_path.exists() else None
+            self.send_json(
+                200 if code == 0 else 500,
+                {
+                    "ok": code == 0,
+                    "platform": platform,
+                    "exit_code": code,
+                    "dryrun": record,
+                    "output": output[-8000:],
+                },
+            )
+        except subprocess.TimeoutExpired as exc:
+            self.send_json(504, {"ok": False, "error": "platform dryrun timed out", "output": (exc.stdout or "")[-8000:] if isinstance(exc.stdout, str) else ""})
         except Exception as exc:
             self.send_json(500, {"ok": False, "error": str(exc)})
 
