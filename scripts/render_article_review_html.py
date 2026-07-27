@@ -44,7 +44,15 @@ def review_status_label(status: str) -> str:
 
 
 def load_latest_article() -> tuple[str, str]:
-    for path in (OUT_DIR / "draft-latest.md", OUT_DIR / "knowledge-share-latest.md"):
+    review_path = OUT_DIR / "article-review-latest.json"
+    content_kind = ""
+    if review_path.exists():
+        content_kind = str(json.loads(review_path.read_text(encoding="utf-8")).get("content_kind", ""))
+    if content_kind == "knowledge_share":
+        paths = (OUT_DIR / "knowledge-share-latest.md", OUT_DIR / "draft-latest.md")
+    else:
+        paths = (OUT_DIR / "draft-latest.md", OUT_DIR / "knowledge-share-latest.md")
+    for path in paths:
         if path.exists():
             article = path.read_text(encoding="utf-8")
             article = re.sub(r"\A<!--.*?-->\s*", "", article, flags=re.S).strip()

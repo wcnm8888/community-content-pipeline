@@ -399,6 +399,7 @@ def main() -> int:
             rewrite_system_prompt=PROMPT_PATH.read_text(encoding="utf-8"),
         ),
     )
+    review["content_kind"] = "knowledge_share"
 
     metadata = {
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),

@@ -1668,6 +1668,7 @@ def article_review_to_markdown(review: dict) -> str:
 
 
 def write_article_review(review: dict, timestamp: str, run_dir: Path) -> tuple[Path, Path, Path]:
+    review.setdefault("content_kind", "daily_digest")
     json_path = run_dir / f"article-review-{timestamp}.json"
     md_path = run_dir / f"article-review-{timestamp}.md"
     latest_json = OUT_DIR / "article-review-latest.json"
