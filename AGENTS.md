@@ -186,7 +186,7 @@ Urls = 用哪些资料作为事实来源：https://modelcontextprotocol.io/
 -> scripts\generate_knowledge_share.ps1 整理参数
 -> 调用 scripts\knowledge_share.py
 -> 如果传了 --urls，优先使用手动资料链接
--> 如果没传 --urls，尝试使用 SEARCH_PROVIDER / SEARCH_API_KEY / SEARCH_BASE_URL 搜索
+-> 如果没传 --urls，尝试使用 SEARCH_PROVIDER / TAVILY_API_KEY / TAVILY_BASE_URL 搜索
 -> 合并搜索结果和手动 URL
 -> 按来源类型、可信度、低质量特征过滤和排序
 -> Jina Reader 提取网页正文
@@ -239,9 +239,9 @@ risk_notes
 如果要启用自动搜索，在本地 `.env` 中配置：
 
 ```env
-SEARCH_PROVIDER=brave
-SEARCH_API_KEY=你的 Brave Search API Key
-SEARCH_BASE_URL=https://api.search.brave.com/res/v1/web/search
+SEARCH_PROVIDER=tavily
+TAVILY_API_KEY=你的 Tavily API Key
+TAVILY_BASE_URL=https://api.tavily.com/search
 ```
 
 如果没有配置搜索 API，使用手动 URL 模式：
@@ -568,7 +568,7 @@ n8n 定时触发
 
 ```text
 用户指定知识点 / 技术主题 / 开源项目名
--> 可选调用 Brave Search API 搜索高质量资料
+-> 可选调用 Tavily Search API 搜索高质量资料
 -> 或使用用户手动传入的 --urls 资料链接
 -> 按来源类型和可信度过滤、排序、去重
 -> Jina Reader 提取网页正文
@@ -834,7 +834,7 @@ E:\社区账号\content-pipeline\out\YYYY-MM-DD\cover-prompt-时间.txt
 ```text
 1. 用户传入 --topic，必要时补充 --angle 和 --audience。
 2. 如果传了 --urls，系统把这些 URL 当作手动资料源。
-3. 如果没有传 --urls，系统会尝试读取 SEARCH_PROVIDER / SEARCH_API_KEY / SEARCH_BASE_URL，当前支持 Brave Search API。
+3. 如果没有传 --urls，系统会尝试读取 SEARCH_PROVIDER / TAVILY_API_KEY / TAVILY_BASE_URL，当前支持 Tavily Search API。
 4. 搜索结果和手动 URL 会合并、去重，并按来源类型打分。
 5. 高优先级来源包括官方文档、官方博客、GitHub README/Release/Issues、论文、权威工程博客。
 6. 低质量来源如营销软文、榜单聚合、纯转载、无来源摘要会被降权或过滤。
@@ -865,9 +865,9 @@ cd E:\社区账号\content-pipeline
 如果要启用自动搜索，在本地 `.env` 中配置：
 
 ```env
-SEARCH_PROVIDER=brave
-SEARCH_API_KEY=你的 Brave Search API Key
-SEARCH_BASE_URL=https://api.search.brave.com/res/v1/web/search
+SEARCH_PROVIDER=tavily
+TAVILY_API_KEY=你的 Tavily API Key
+TAVILY_BASE_URL=https://api.tavily.com/search
 ```
 
 配置搜索 API 后，可以只给主题：

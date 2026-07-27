@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlparse
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from daily_digest import (
@@ -124,18 +124,27 @@ def classify_source(url: str, title: str = "") -> tuple[str, int, list[str]]:
     return source_type, max(0, min(100, score)), notes
 
 
-def search_brave(env: dict, topic: str, angle: str, top_results: int) -> list[SourceCandidate]:
-    api_key = env.get("SEARCH_API_KEY", "").strip()
-    if not api_key or api_key in {"your-search-api-key", "sk-your-search-key"}:
-        raise RuntimeError("SEARCH_API_KEY is not configured. Configure Brave Search or use --urls manual mode.")
-    base_url = env.get("SEARCH_BASE_URL", "https://api.search.brave.com/res/v1/web/search").strip()
+def search_tavily(env: dict, topic: str, angle: str, top_results: int) -> list[SourceCandidate]:
+    api_key = env.get("TAVILY_API_KEY", "").strip()
+    if not api_key or api_key in {"your-tavily-api-key", "tvly-your-key"}:
+        raise RuntimeError("TAVILY_API_KEY is not configured. Configure Tavily or use --urls manual mode.")
+    base_url = env.get("TAVILY_BASE_URL", "https://api.tavily.com/search").strip()
     query = f"{topic} {angle}".strip()
-    params = f"?q={quote(query, safe='')}&count={max(1, min(top_results, 20))}&search_lang=en&country=US"
+    payload = json.dumps({
+        "query": query,
+        "max_results": max(1, min(top_results, 20)),
+        "search_depth": "basic",
+        "include_answer": False,
+        "include_raw_content": False,
+    }).encode("utf-8")
     req = Request(
-        base_url.rstrip("/") + params,
+        base_url,
+        data=payload,
+        method="POST",
         headers={
+            "Content-Type": "application/json",
             "Accept": "application/json",
-            "X-Subscription-Token": api_key,
+            "Authorization": f"Bearer {api_key}",
             "User-Agent": "content-pipeline-mvp/1.0",
         },
     )
@@ -143,12 +152,12 @@ def search_brave(env: dict, topic: str, angle: str, top_results: int) -> list[So
         payload = json.loads(resp.read().decode("utf-8"))
 
     candidates: list[SourceCandidate] = []
-    for index, item in enumerate((payload.get("web") or {}).get("results", []), 1):
+    for index, item in enumerate(payload.get("results", []), 1):
         url = str(item.get("url", "")).strip()
         if not url.startswith(("http://", "https://")):
             continue
         title = clean_text(str(item.get("title", "") or url))
-        snippet = clean_text(str(item.get("description", "")))
+        snippet = clean_text(str(item.get("content", "")))
         source_type, score, notes = classify_source(url, title)
         if score < 45:
             continue
@@ -157,12 +166,10 @@ def search_brave(env: dict, topic: str, angle: str, top_results: int) -> list[So
 
 
 def search_sources(env: dict, topic: str, angle: str, top_results: int) -> list[SourceCandidate]:
-    provider = env.get("SEARCH_PROVIDER", "").strip().lower()
-    if not provider:
-        raise RuntimeError("SEARCH_PROVIDER is not configured. Configure SEARCH_PROVIDER=brave or use --urls manual mode.")
-    if provider != "brave":
-        raise RuntimeError(f"Unsupported SEARCH_PROVIDER={provider}. First version supports brave or --urls manual mode.")
-    return search_brave(env, topic, angle, top_results)
+    provider = env.get("SEARCH_PROVIDER", "tavily").strip().lower()
+    if provider != "tavily":
+        raise RuntimeError(f"Unsupported SEARCH_PROVIDER={provider}. This project uses Tavily or --urls manual mode.")
+    return search_tavily(env, topic, angle, top_results)
 
 
 def dedupe_candidates(candidates: list[SourceCandidate]) -> list[SourceCandidate]:
