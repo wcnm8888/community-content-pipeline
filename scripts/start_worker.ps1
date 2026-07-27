@@ -5,7 +5,7 @@ $port = 8020
 
 function Test-WorkerHealth {
   try {
-    $response = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:$port/health" -TimeoutSec 3
+    $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$port/health" -TimeoutSec 3
     $health = $response.Content | ConvertFrom-Json
     return [bool]$health.ok
   } catch {
@@ -18,7 +18,7 @@ if (Test-WorkerHealth) {
   exit 0
 }
 
-$existing = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
+$existing = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
 if ($existing) {
   throw "Port $port is occupied, but the content worker health check failed. Existing process was not stopped."
 }

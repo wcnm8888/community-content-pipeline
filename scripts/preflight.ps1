@@ -39,13 +39,13 @@ if (-not $envNames.ContainsKey("DEEPSEEK_API_KEY") -or -not $envNames["DEEPSEEK_
 
 if ($RequireWorker) {
     try {
-        $response = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:8020/health" -TimeoutSec 5
+        $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8020/health" -TimeoutSec 5
         $health = $response.Content | ConvertFrom-Json
         if (-not $health.ok) {
             throw "Worker health response is not ok."
         }
     } catch {
-        throw "Content worker is not healthy at http://localhost:8020/health."
+        throw "Content worker is not healthy at http://127.0.0.1:8020/health."
     }
 }
 

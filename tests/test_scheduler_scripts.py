@@ -16,6 +16,7 @@ class SchedulerScriptTests(unittest.TestCase):
     def test_worker_startup_uses_health_check_and_does_not_stop_unknown_process(self):
         content = (ROOT / "scripts" / "start_worker.ps1").read_text(encoding="utf-8")
         self.assertIn("/health", content)
+        self.assertIn("127.0.0.1", content)
         self.assertIn("Port $port is occupied", content)
         self.assertNotIn("Stop-Process", content)
 
