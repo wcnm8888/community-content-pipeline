@@ -25,7 +25,10 @@
       "parameters": {
         "method": "POST",
         "url": "http://host.docker.internal:8020/run-daily",
-        "sendBody": false,
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\"request_id\":\"{{$execution.id}}\"}",
         "options": {
           "timeout": 900000
         }
@@ -38,6 +41,19 @@
         260,
         0
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $json;\nif (!result.ok || result.status !== 'succeeded') {\n  throw new Error(`Daily digest failed: ${result.failed_stage || result.error || 'unknown error'}`);\n}\nreturn [{ json: {\n  request_id: result.request_id,\n  run_id: result.run_id,\n  pipeline: result.pipeline,\n  status: result.status,\n  retryable: result.retryable,\n  manifest: result.manifest,\n  article_review_url: result.article_review_url,\n  platform_pack_url: result.platform_pack_url,\n  preview_url: result.preview_url\n} }];"
+      },
+      "id": "8c3a9345-0ac7-4c0f-8b4b-8bd7d6c44e5e",
+      "name": "Validate Daily Digest Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
     }
   ],
   "connections": {
@@ -46,6 +62,17 @@
         [
           {
             "node": "Generate Daily Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Daily Digest": {
+      "main": [
+        [
+          {
+            "node": "Validate Daily Digest Result",
             "type": "main",
             "index": 0
           }
