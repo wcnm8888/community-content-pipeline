@@ -91,6 +91,7 @@ function Invoke-PlatformByKey {
 
 $context = New-PublishContext -Root $root -Mode $Mode -Cover16x9 $Cover16x9 -Cover3x4 $Cover3x4
 $requestedPlatforms = Resolve-RequestedPlatforms $Platforms
+Save-DryRunRecord $context
 
 Write-PublishLog $context "Mode: $Mode"
 Write-PublishLog $context ("Platforms: " + ($requestedPlatforms -join ", "))
@@ -113,10 +114,12 @@ foreach ($platform in $requestedPlatforms) {
         Invoke-PlatformByKey -Platform $platform -Context $context -Pack $pack
     } catch {
         Write-PublishLog $context "Platform failed: $platform. $($_.Exception.Message)" "ERROR"
+        Write-DryRunPlatformResult $context $platform "failed" $null @() @() $_.Exception.Message
         Wait-ManualAction $context "platform $platform failed; inspect browser/logs, then press Enter to continue to the next platform"
     } finally {
         $context.CurrentPlatform = ""
     }
 }
 
+Save-DryRunRecord $context
 Write-PublishLog $context "Done. No final publish occurs in DryRun or Draft mode."

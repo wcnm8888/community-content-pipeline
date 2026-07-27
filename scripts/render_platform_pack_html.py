@@ -190,6 +190,8 @@ def main() -> int:
     raw_data = json.loads(source.read_text(encoding="utf-8"))
     review_source = OUT_DIR / "platform-review-latest.json"
     platform_review = json.loads(review_source.read_text(encoding="utf-8")) if review_source.exists() else {}
+    dryrun_source = OUT_DIR / "dryrun-latest.json"
+    dryrun = json.loads(dryrun_source.read_text(encoding="utf-8-sig")) if dryrun_source.exists() else {}
     review_run_id = str(platform_review.get("run_id", ""))
     data = normalize_pack(raw_data)
     SITE_DIR.mkdir(parents=True, exist_ok=True)
@@ -204,6 +206,22 @@ def main() -> int:
         steps = "".join(f"<li>{html.escape(step)}</li>" for step in platform["steps"])
         review_item = platform_review.get("platforms", {}).get(key, {})
         review_status = str(review_item.get("status", "not_generated"))
+        dryrun_item = dryrun.get("platforms", {}).get(key, {})
+        dryrun_status = str(dryrun_item.get("status", "not_run"))
+        dryrun_fields = ", ".join(str(item) for item in dryrun_item.get("available_fields", []))
+        dryrun_entry = "是" if dryrun_item.get("entry_detected") else "否"
+        dryrun_login = "是" if dryrun_item.get("login_detected") else "否"
+        dryrun_challenge = "是" if dryrun_item.get("challenge_detected") else "否"
+        dryrun_error = str(dryrun_item.get("error") or "")
+        dryrun_html = f"""
+              <div class="dryrun" id="dryrun-{html.escape(key)}" data-dryrun="{html.escape(key)}">
+                <div><strong>DryRun 状态：</strong><span class="dryrun-status">{html.escape(dryrun_status)}</span></div>
+                <div class="dryrun-meta">入口识别：{dryrun_entry}　登录提示：{dryrun_login}　验证码/风控：{dryrun_challenge}</div>
+                <div class="dryrun-meta">识别字段：{html.escape(dryrun_fields or "暂无")}</div>
+                <div class="dryrun-error">{html.escape(dryrun_error)}</div>
+                <button type="button" data-dryrun-retry="{html.escape(key)}">重试此平台 DryRun</button>
+              </div>
+        """
         review_controls = ""
         if review_run_id:
             review_controls = f"""
@@ -230,6 +248,7 @@ def main() -> int:
                 <ol>{steps}</ol>
               </div>
               {review_controls}
+              {dryrun_html}
               <div class="fields">{''.join(field_html)}</div>
             </section>
             """
@@ -330,6 +349,25 @@ def main() -> int:
       gap: 12px;
       padding: 16px 18px 18px;
     }}
+    .dryrun {{
+      margin: 14px 18px 0;
+      padding: 12px 14px;
+      border: 1px solid #d8dee8;
+      border-radius: 8px;
+      background: #f8fafc;
+      line-height: 1.7;
+    }}
+    .dryrun-meta {{ color: #57606a; font-size: 13px; }}
+    .dryrun-error {{ color: #b42318; white-space: pre-wrap; word-break: break-word; }}
+    .dryrun button {{
+      margin-top: 7px;
+      border: 1px solid #b8c4d2;
+      background: #fff;
+      color: #0b5cad;
+      border-radius: 6px;
+      padding: 5px 9px;
+      cursor: pointer;
+    }}
     .field {{
       border: 1px solid #d8dee8;
       border-radius: 8px;
@@ -417,6 +455,32 @@ def main() -> int:
           window.alert('平台审核保存失败：' + error.message);
         }} finally {{
           panel.querySelectorAll('button').forEach((item) => item.disabled = false);
+        }}
+      }});
+    }});
+    document.querySelectorAll('[data-dryrun-retry]').forEach((button) => {{
+      button.addEventListener('click', async () => {{
+        const platform = button.dataset.dryrunRetry;
+        const panel = button.closest('[data-dryrun]');
+        button.disabled = true;
+        button.textContent = '正在检查...';
+        try {{
+          const response = await fetch('http://localhost:8020/dryrun', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{ platform }})
+          }});
+          const payload = await response.json();
+          if (!response.ok || !payload.ok) throw new Error(payload.error || 'DryRun 失败');
+          const item = payload.dryrun && payload.dryrun.platforms && payload.dryrun.platforms[platform];
+          if (item) panel.querySelector('.dryrun-status').textContent = item.status || 'unknown';
+          window.location.reload();
+        }} catch (error) {{
+          panel.querySelector('.dryrun-status').textContent = 'failed';
+          panel.querySelector('.dryrun-error').textContent = error.message;
+        }} finally {{
+          button.disabled = false;
+          button.textContent = '重试此平台 DryRun';
         }}
       }});
     }});

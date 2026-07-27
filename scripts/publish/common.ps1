@@ -28,6 +28,21 @@ function New-PublishContext {
 
     $logDir = Join-Path $Root "out\publish-logs\$date"
     New-Item -ItemType Directory -Force $logDir | Out-Null
+    $dryRunRunId = Get-Date -Format "yyyyMMdd-HHmmss"
+    $dryRunLatestJson = Join-Path $Root "out\dryrun-latest.json"
+    $dryRunDatedJson = Join-Path $Root "out\$date\dryrun-$dryRunRunId.json"
+
+    $dryRunRecord = $null
+    if ($Mode -eq "DryRun") {
+        $dryRunRecord = [ordered]@{
+            run_id = $dryRunRunId
+            mode = $Mode
+            started_at = (Get-Date).ToString("o")
+            finished_at = $null
+            overall_status = "running"
+            platforms = [ordered]@{}
+        }
+    }
 
     [pscustomobject]@{
         Root = $Root
@@ -43,7 +58,81 @@ function New-PublishContext {
         Cover16x9 = $Cover16x9
         Cover3x4 = $Cover3x4
         CurrentPlatform = ""
+        DryRunRecord = $dryRunRecord
+        DryRunLatestJson = $dryRunLatestJson
+        DryRunDatedJson = $dryRunDatedJson
     }
+}
+
+function Save-DryRunRecord {
+    param([Parameter(Mandatory = $true)]$Context)
+
+    if ($Context.Mode -ne "DryRun" -or -not $Context.DryRunRecord) {
+        return
+    }
+
+    $records = @($Context.DryRunRecord.platforms.Values)
+    if ($records.Count -eq 0) {
+        $Context.DryRunRecord.overall_status = "running"
+    } elseif ($records | Where-Object { $_.status -in @("failed", "needs_manual") }) {
+        $Context.DryRunRecord.overall_status = "partial"
+    } elseif ($records | Where-Object { $_.status -eq "running" }) {
+        $Context.DryRunRecord.overall_status = "running"
+    } else {
+        $Context.DryRunRecord.overall_status = "passed"
+    }
+    $Context.DryRunRecord.finished_at = if ($Context.DryRunRecord.overall_status -eq "running") { $null } else { (Get-Date).ToString("o") }
+    $json = $Context.DryRunRecord | ConvertTo-Json -Depth 20
+    Set-Content -LiteralPath $Context.DryRunLatestJson -Value $json -Encoding UTF8
+    New-Item -ItemType Directory -Force (Split-Path -Parent $Context.DryRunDatedJson) | Out-Null
+    Set-Content -LiteralPath $Context.DryRunDatedJson -Value $json -Encoding UTF8
+}
+
+function Write-DryRunPlatformResult {
+    param(
+        [Parameter(Mandatory = $true)]$Context,
+        [Parameter(Mandatory = $true)][string]$Platform,
+        [Parameter(Mandatory = $true)][ValidateSet("running", "passed", "needs_manual", "failed", "skipped")][string]$Status,
+        $State = $null,
+        [string[]]$AvailableFields = @(),
+        [string[]]$MissingFields = @(),
+        [string]$ErrorMessage = ""
+    )
+
+    if ($Context.Mode -ne "DryRun" -or -not $Context.DryRunRecord) {
+        return
+    }
+
+    $entryTerms = @()
+    $loginTerms = @()
+    $challengeTerms = @()
+    $pageErrors = @()
+    $pageUrl = ""
+    $pageTitle = ""
+    if ($State) {
+        $pageUrl = [string]$State.url
+        $pageTitle = [string]$State.title
+        $entryTerms = @($State.entryTerms | ForEach-Object { [string]$_ })
+        $loginTerms = @($State.loginTerms | ForEach-Object { [string]$_ })
+        $challengeTerms = @($State.challengeTerms | ForEach-Object { [string]$_ })
+        $pageErrors = @($State.errors | ForEach-Object { Protect-LogText ([string]$_) })
+    }
+    $Context.DryRunRecord.platforms[$Platform] = [ordered]@{
+        status = $Status
+        url = $pageUrl
+        page_title = $pageTitle
+        entry_detected = ($entryTerms.Count -gt 0)
+        entry_terms = $entryTerms
+        login_detected = ($loginTerms.Count -gt 0)
+        login_terms = $loginTerms
+        challenge_detected = ($challengeTerms.Count -gt 0)
+        challenge_terms = $challengeTerms
+        available_fields = @($AvailableFields)
+        missing_fields = @($MissingFields)
+        error = if ($ErrorMessage) { Protect-LogText $ErrorMessage } elseif ($pageErrors.Count -gt 0) { $pageErrors -join " | " } else { $null }
+        checked_at = (Get-Date).ToString("o")
+    }
+    Save-DryRunRecord $Context
 }
 function Write-PublishLog {
     param(
@@ -502,7 +591,19 @@ async page => {
 }
 '@
     $js = $js.Replace("__ENTRY_HINTS__", $entryHints)
-    return Invoke-BrowserFunction $Context $js "page-state-$($Spec.Key)"
+    try {
+        return Invoke-BrowserFunction $Context $js "page-state-$($Spec.Key)"
+    } catch {
+        return [pscustomobject]@{
+            url = ""
+            title = ""
+            challengeTerms = @()
+            loginTerms = @()
+            entryTerms = @()
+            buttonCount = 0
+            errors = @((Protect-LogText $_.Exception.Message))
+        }
+    }
 }
 
 function Invoke-DraftFill {
@@ -880,6 +981,13 @@ function Invoke-GenericPlatform {
     if ($Context.Mode -eq "DryRun") {
         $data = Get-PlatformData $Pack $Spec.Key
         $fieldNames = ($data.PSObject.Properties.Name | Where-Object { $_ -ne "_meta" } | Sort-Object) -join ", "
+        $status = "passed"
+        if ($state.errors -and $state.errors.Count -gt 0) {
+            $status = "failed"
+        } elseif (($state.challengeTerms -and $state.challengeTerms.Count -gt 0) -or ($state.loginTerms -and $state.loginTerms.Count -gt 0) -or -not ($state.entryTerms -and $state.entryTerms.Count -gt 0)) {
+            $status = "needs_manual"
+        }
+        Write-DryRunPlatformResult $Context $Spec.Key $status $state ($fieldNames -split ", " | Where-Object { $_ }) @() ""
         Write-PublishLog $Context "DryRun completed. Fields available: $fieldNames"
         return
     }
