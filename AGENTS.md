@@ -1,5 +1,105 @@
 # AGENTS.md
 
+## 项目升级摘要（先看这里）
+
+### 一、如何使用项目
+
+项目目录：`E:\社区账号\content-pipeline`
+
+启动 Docker 服务和本地 Worker：
+
+```powershell
+Set-Location "E:\社区账号\content-pipeline"
+docker compose up -d
+.\scripts\start_worker.ps1
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8020/health
+```
+
+主要入口：
+
+```text
+n8n 管理页：     http://localhost:5860
+预览站点：       http://localhost:8010
+Worker 健康检查：http://localhost:8020/health
+日报工作流：     在 n8n 中执行 Daily Tech Intelligence
+```
+
+指定主题生成文章：
+
+```powershell
+.\scripts\generate_knowledge_share.ps1 `
+  -Topic "好用的 Codex 插件分享" `
+  -Angle "介绍使用场景、适合人群、配置方法和注意事项" `
+  -TopResults 8 `
+  -ReaderTimeout 18
+```
+
+查看和审核：
+
+```text
+日报草稿：     http://localhost:8010/draft-latest.html
+主题文章：     http://localhost:8010/knowledge-share-latest.html
+内容池：       http://localhost:8010/content-pool-latest.html
+主题候选：     http://localhost:8010/topic-candidates-latest.html
+文章人工审核： http://localhost:8010/article-review-latest.html
+平台版本审核： http://localhost:8010/platform-pack-latest.html
+```
+
+审核顺序：文章和来源 → 文章人工通过 → 平台版本 → 平台人工通过 → 按需 DryRun → 原有插件同步 → 用户手动发布。
+
+DryRun 命令：
+
+```powershell
+.\scripts\publish_daily.ps1 -Mode DryRun
+```
+
+DryRun 只检查入口、登录状态、验证码/风控和字段，不填写、不保存、不发布。
+
+常用测试：
+
+```powershell
+python -m unittest discover -s tests -p "test_*.py" -v
+Get-ChildItem scripts -Filter *.py | ForEach-Object { python -m py_compile $_.FullName }
+python -m json.tool n8n-workflows\daily-tech-intel.json > $null
+```
+
+### 二、项目整体流程和思想
+
+```text
+新闻或指定主题采集
+→ 来源读取、去重和筛选
+→ AI 生成文章草稿
+→ 事实、来源和质量检查
+→ 人工审核文章
+→ 生成不同平台版本
+→ 人工审核平台版本
+→ 浏览器插件辅助同步
+→ 人工最终确认发布
+```
+
+项目采用“自动生产、人工审核、人工发布”的半自动模式。生成和发布严格分离；AI 不直接发布；文章审核和平台版本审核相互独立；所有运行都保留来源、`run_id`、事实、审核和失败阶段记录；n8n 只负责调度，内容生产由脚本负责；同一时间只启用一个每日调度器。
+
+### 三、具体如何实现
+
+- `scripts/daily_digest.py`：日报采集、去重、事实卡、主题候选、文章和平台包生成。
+- `scripts/knowledge_share.py`：指定主题研究，使用 Tavily 搜索和 Reader 获取来源正文。
+- `scripts/run_manifest.py`：保存每次运行的状态、阶段、错误和重试关系。
+- `scripts/review_state.py`、`scripts/platform_review.py`：文章和平台人工审核状态。
+- `scripts/worker_server.py`：提供 `/run-daily`、`/run-knowledge`、`/review`、`/platform-review`、`/dryrun` 和 `/health` 接口。
+- `scripts/generate_platform_versions.py`：文章人工通过后生成平台版本。
+- `scripts/publish_daily.ps1` 与 `scripts/publish/`：使用浏览器辅助流程，只做 DryRun、草稿或人工确认后的同步。
+- `n8n-workflows/daily-tech-intel.json`：19:10 触发日报，传递 `request_id`，接收 Worker 返回的 `run_id` 和 manifest，并校验业务状态。
+- `prompts/cover-image.md`：生成封面提示词；当前只生成提示词，不自动生成图片。
+
+### 四、其他补充
+
+- 不要同时启用 n8n Schedule Trigger 和 Windows 计划任务 `ContentPipelineDailyDigest`。
+- Docker 工作流更新后需要重启 `content-n8n`；Worker 代码更新后需要重启本地 Worker。
+- `out/run-manifest-latest.json` 是最新运行清单；`out/dryrun-latest.json` 是最新平台 DryRun 记录。
+- 发生问题时按“Docker → Worker /health → n8n Execution → run manifest → 审核页面 → 浏览器登录状态”的顺序排查。
+- 先稳定运行一到两周，再根据真实失败记录创建下一张任务卡。
+
+
 ## 阅读方式
 
 这份文档现在按“先看主流程，再查附录”的方式组织。
@@ -1712,3 +1812,9 @@ out\旧日期\content-pool-*.json  旧内容池归档
 行动建议是否可执行
 读者看完是否知道下一步做什么
 ```
+
+## 本次项目总结补充
+
+当前项目已经形成可实际使用的 MVP：日报和指定主题两条内容链路均可生成文章、保留来源、进入人工审核并生成平台版本；n8n 已作为每日调度器，浏览器插件仍作为人工确认后的发布辅助工具。
+
+后续不建议为了追求全自动而扩大风险。优先稳定运行、备份运行数据、记录真实失败，再根据实际问题创建新的功能分支和任务卡。
