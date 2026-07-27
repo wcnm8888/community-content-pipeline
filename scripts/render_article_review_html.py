@@ -1,5 +1,6 @@
 import html
 import json
+import re
 from pathlib import Path
 
 
@@ -42,6 +43,15 @@ def review_status_label(status: str) -> str:
     }.get(status, "待人工审核")
 
 
+def load_latest_article() -> tuple[str, str]:
+    for path in (OUT_DIR / "draft-latest.md", OUT_DIR / "knowledge-share-latest.md"):
+        if path.exists():
+            article = path.read_text(encoding="utf-8")
+            article = re.sub(r"\A<!--.*?-->\s*", "", article, flags=re.S).strip()
+            return article, path.name
+    return "", ""
+
+
 def main() -> int:
     source = OUT_DIR / "article-review-latest.json"
     if not source.exists():
@@ -55,6 +65,8 @@ def main() -> int:
     human_status = str(human_review.get("status", "pending"))
     run_id = str(review.get("run_id", ""))
     review_payload = json.dumps({"run_id": run_id}, ensure_ascii=False)
+    article, article_filename = load_latest_article()
+    article_html = html.escape(article) if article else "当前没有找到最新文章正文。"
 
     page = f"""<!doctype html>
 <html lang="zh-CN">
@@ -185,6 +197,16 @@ def main() -> int:
     button.danger {{ background: #cf222e; }}
     button:disabled {{ opacity: .6; cursor: wait; }}
     .notice {{ min-height: 22px; color: #57606a; }}
+    .article-body {{
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #fff;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }}
+    .article-link {{ margin: 0 0 14px; }}
   </style>
 </head>
 <body>
@@ -208,6 +230,11 @@ def main() -> int:
         <button class="danger" data-status="rejected">人工驳回</button>
       </div>
       <div class="notice" id="review-notice"></div>
+    </section>
+    <section class="panel">
+      <h2>文章正文</h2>
+      <p class="article-link"><a href="http://localhost:8010/draft-latest.html" target="_blank" rel="noreferrer">打开文章预览页面</a> · 当前文件：<code>{html.escape(article_filename)}</code></p>
+      <div class="article-body">{article_html}</div>
     </section>
     <section class="panel">
       <h2>总评</h2>
