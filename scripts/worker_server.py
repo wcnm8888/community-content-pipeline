@@ -1,7 +1,11 @@
 import json
+import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -17,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 POWERSHELL = shutil.which("pwsh") or shutil.which("powershell") or "powershell.exe"
 DRYRUN_PLATFORMS = {"zhihu", "juejin", "csdn", "douyin", "xiaohongshu", "bilibili"}
+DAILY_RUN_LOCK = threading.Lock()
 
 
 def run_command(args: list[str], timeout: int = 900) -> tuple[int, str]:
@@ -31,6 +36,62 @@ def run_command(args: list[str], timeout: int = 900) -> tuple[int, str]:
         timeout=timeout,
     )
     return proc.returncode, proc.stdout
+
+
+def safe_output(value: str, limit: int = 12000) -> str:
+    text = str(value or "")
+    for key in ("cookie", "token", "password", "passwd", "secret", "authorization", "api_key", "private_key"):
+        text = re.sub(rf"(?i)({key})\s*[:=]\s*[^\s,;]+", r"\1=[REDACTED]", text)
+    return text[-limit:]
+
+
+def load_latest_manifest() -> tuple[str, dict | None]:
+    latest = ROOT / "out" / "run-manifest-latest.json"
+    if not latest.exists():
+        return "", None
+    try:
+        payload = json.loads(latest.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return "", None
+    run_id = str(payload.get("run_id", ""))
+    dated = ROOT / "out" / time.strftime("%Y-%m-%d") / f"run-manifest-{run_id}.json"
+    return str(dated if dated.exists() else latest), payload
+
+
+def build_daily_response(request_id: str, stage_codes: dict[str, int], outputs: dict[str, str]) -> dict:
+    manifest_path, manifest = load_latest_manifest()
+    failed_stage = None
+    for stage, code in stage_codes.items():
+        if code != 0:
+            failed_stage = stage
+            break
+    ok = failed_stage is None
+    if manifest and manifest.get("status") == "failed" and not failed_stage:
+        failed_stage = next(
+            (name for name, item in manifest.get("stages", {}).items() if item.get("status") == "failed"),
+            "daily_digest",
+        )
+        ok = False
+    run_id = str(manifest.get("run_id", "")) if manifest else ""
+    return {
+        "ok": ok,
+        "request_id": request_id,
+        "run_id": run_id,
+        "pipeline": "daily_digest",
+        "status": "succeeded" if ok else "failed",
+        "failed_stage": failed_stage,
+        "retryable": not ok,
+        "manifest": {
+            "path": manifest_path,
+            "status": manifest.get("status") if manifest else None,
+            "failed_stage": failed_stage,
+            "data": manifest,
+        },
+        "article_review_url": "http://localhost:8010/article-review-latest.html",
+        "platform_pack_url": "http://localhost:8010/platform-pack-latest.html",
+        "preview_url": "http://localhost:8010/draft-latest.html",
+        "outputs": {key: safe_output(value, 4000) for key, value in outputs.items()},
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -85,83 +146,59 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(404, {"ok": False, "error": "not found"})
             return
 
+        body = self.read_json_body()
+        request_id = str(body.get("request_id", "")).strip() or uuid.uuid4().hex
+        if not DAILY_RUN_LOCK.acquire(blocking=False):
+            self.send_json(
+                409,
+                {
+                    "ok": False,
+                    "request_id": request_id,
+                    "pipeline": "daily_digest",
+                    "status": "already_running",
+                    "retryable": True,
+                    "error": "another daily digest is already running",
+                },
+            )
+            return
+
         try:
-            digest_code, digest_out = run_command(
+            stage_codes: dict[str, int] = {}
+            outputs: dict[str, str] = {}
+            stage_codes["daily_digest"], outputs["daily_digest"] = run_command(
                 [
                     PYTHON,
                     "scripts/daily_digest.py",
-                    "--top",
-                    "8",
-                    "--limit-per-feed",
-                    "5",
-                    "--feed-timeout",
-                    "12",
-                    "--reader-timeout",
-                    "18",
-                    "--pool-size",
-                    "30",
+                    "--top", "8", "--limit-per-feed", "5", "--feed-timeout", "12",
+                    "--reader-timeout", "18", "--pool-size", "30",
                 ],
                 timeout=1200,
             )
-            content_pool_render_code, content_pool_render_out = run_command(
-                [PYTHON, "scripts/render_content_pool_html.py"],
-                timeout=60,
-            )
-            topic_render_code, topic_render_out = run_command(
-                [PYTHON, "scripts/render_topic_candidates_html.py"],
-                timeout=60,
-            )
-            render_code, render_out = run_command([PYTHON, "scripts/render_draft_html.py"], timeout=60)
-            review_render_code, review_render_out = run_command(
-                [PYTHON, "scripts/render_article_review_html.py"],
-                timeout=60,
-            )
-            platform_render_code, platform_render_out = run_command(
-                [PYTHON, "scripts/render_platform_pack_html.py"],
-                timeout=60,
-            )
-            ok = (
-                digest_code == 0
-                and content_pool_render_code == 0
-                and topic_render_code == 0
-                and render_code == 0
-                and review_render_code == 0
-                and platform_render_code == 0
-            )
-            self.send_json(
-                200 if ok else 500,
-                {
-                    "ok": ok,
-                    "digest_exit_code": digest_code,
-                    "content_pool_render_exit_code": content_pool_render_code,
-                    "topic_render_exit_code": topic_render_code,
-                    "render_exit_code": render_code,
-                    "review_render_exit_code": review_render_code,
-                    "platform_render_exit_code": platform_render_code,
-                    "digest_output": digest_out[-12000:],
-                    "content_pool_render_output": content_pool_render_out[-4000:],
-                    "topic_render_output": topic_render_out[-4000:],
-                    "render_output": render_out[-4000:],
-                    "review_render_output": review_render_out[-4000:],
-                    "platform_render_output": platform_render_out[-4000:],
-                    "content_pool_url": "http://localhost:8010/content-pool-latest.html",
-                    "topic_candidates_url": "http://localhost:8010/topic-candidates-latest.html",
-                    "preview_url": "http://localhost:8010/draft-latest.html",
-                    "article_review_url": "http://localhost:8010/article-review-latest.html",
-                    "platform_pack_url": "http://localhost:8010/platform-pack-latest.html",
-                },
-            )
+            stage_codes["content_pool_render"], outputs["content_pool_render"] = run_command([PYTHON, "scripts/render_content_pool_html.py"], timeout=60)
+            stage_codes["topic_candidates_render"], outputs["topic_candidates_render"] = run_command([PYTHON, "scripts/render_topic_candidates_html.py"], timeout=60)
+            stage_codes["draft_render"], outputs["draft_render"] = run_command([PYTHON, "scripts/render_draft_html.py"], timeout=60)
+            stage_codes["article_review_render"], outputs["article_review_render"] = run_command([PYTHON, "scripts/render_article_review_html.py"], timeout=60)
+            stage_codes["platform_pack_render"], outputs["platform_pack_render"] = run_command([PYTHON, "scripts/render_platform_pack_html.py"], timeout=60)
+            result = build_daily_response(request_id, stage_codes, outputs)
+            self.send_json(200 if result["ok"] else 500, result)
         except subprocess.TimeoutExpired as exc:
             self.send_json(
                 504,
                 {
                     "ok": False,
+                    "request_id": request_id,
+                    "pipeline": "daily_digest",
+                    "status": "failed",
+                    "failed_stage": "daily_digest",
+                    "retryable": True,
                     "error": "daily digest timed out",
-                    "output": (exc.stdout or "")[-8000:] if isinstance(exc.stdout, str) else "",
+                    "output": safe_output(exc.stdout or "", 8000) if isinstance(exc.stdout, str) else "",
                 },
             )
         except Exception as exc:
-            self.send_json(500, {"ok": False, "error": str(exc)})
+            self.send_json(500, {"ok": False, "request_id": request_id, "pipeline": "daily_digest", "status": "failed", "retryable": True, "error": safe_output(str(exc), 1000)})
+        finally:
+            DAILY_RUN_LOCK.release()
 
     def update_review(self) -> None:
         try:
