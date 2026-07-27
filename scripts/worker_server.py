@@ -4,8 +4,12 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from review_state import update_review_files
-from platform_review import update_platform_review as persist_platform_review
+try:
+    from .review_state import update_review_files
+    from .platform_review import update_platform_review as persist_platform_review
+except ImportError:
+    from review_state import update_review_files
+    from platform_review import update_platform_review as persist_platform_review
 
 
 ROOT = Path(__file__).resolve().parents[1]
