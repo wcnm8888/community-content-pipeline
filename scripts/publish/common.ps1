@@ -922,3 +922,20 @@ function Assert-HumanReviewApproved {
     }
     Write-PublishLog $Context "Human review approved; platform sync may continue."
 }
+
+function Assert-PlatformReviewApproved {
+    param(
+        [Parameter(Mandatory = $true)]$Context,
+        [Parameter(Mandatory = $true)][string[]]$Platforms
+    )
+
+    $reviewPath = Join-Path $Context.Root "out\platform-review-latest.json"
+    $review = Read-JsonFile $reviewPath
+    foreach ($platform in $Platforms) {
+        $item = $review.platforms.$platform
+        if (-not $item -or [string]$item.status -ne "approved") {
+            throw "Platform review is not approved for $platform. Current status: $([string]$item.status)."
+        }
+    }
+    Write-PublishLog $Context "Requested platform versions are human-approved; sync may continue."
+}

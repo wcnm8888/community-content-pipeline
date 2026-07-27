@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from review_state import update_review_files
+from platform_review import update_platform_review as persist_platform_review
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,6 +63,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if self.path == "/review":
             self.update_review()
+            return
+        if self.path == "/platform-review":
+            self.update_platform_review()
             return
         if self.path == "/run-knowledge":
             self.run_knowledge()
@@ -159,10 +163,22 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(400, {"ok": False, "error": "status is required"})
                 return
             review = update_review_files(ROOT / "out", status, note, run_id)
+            platform_generation = None
+            if status == "approved":
+                generation_code, generation_out = run_command(
+                    [PYTHON, "scripts/generate_platform_versions.py", "--run-id", str(review.get("run_id", ""))],
+                    timeout=1200,
+                )
+                platform_generation = {"exit_code": generation_code, "output": generation_out[-6000:]}
+                if generation_code != 0:
+                    self.send_json(500, {"ok": False, "review_saved": True, "error": "article approved but platform generation failed", "platform_generation": platform_generation})
+                    return
             render_code, render_out = run_command(
                 [PYTHON, "scripts/render_article_review_html.py"],
                 timeout=60,
             )
+            if status == "approved":
+                render_code, render_out = run_command([PYTHON, "scripts/render_platform_pack_html.py"], timeout=60)
             if render_code != 0:
                 self.send_json(500, {"ok": False, "error": "review saved but render failed", "output": render_out[-4000:]})
                 return
@@ -173,8 +189,32 @@ class Handler(BaseHTTPRequestHandler):
                     "run_id": review.get("run_id", ""),
                     "review_status": review.get("review_status", ""),
                     "human_review": review.get("human_review", {}),
+                    "platform_generation": platform_generation,
                 },
             )
+        except ValueError as exc:
+            self.send_json(409, {"ok": False, "error": str(exc)})
+        except FileNotFoundError as exc:
+            self.send_json(404, {"ok": False, "error": str(exc)})
+        except Exception as exc:
+            self.send_json(500, {"ok": False, "error": str(exc)})
+
+    def update_platform_review(self) -> None:
+        try:
+            body = self.read_json_body()
+            record = persist_platform_review(
+                ROOT / "out",
+                str(body.get("platform", "")).strip(),
+                str(body.get("status", "")).strip(),
+                str(body.get("note", "")),
+                str(body.get("run_id", "")).strip(),
+            )
+            render_code, render_out = run_command([PYTHON, "scripts/render_platform_pack_html.py"], timeout=60)
+            if render_code != 0:
+                self.send_json(500, {"ok": False, "error": "platform review saved but render failed", "output": render_out[-4000:]})
+                return
+            platform = str(body.get("platform", "")).strip()
+            self.send_json(200, {"ok": True, "platform": platform, "platform_review": record["platforms"].get(platform, {}), "overall_status": record["overall_status"]})
         except ValueError as exc:
             self.send_json(409, {"ok": False, "error": str(exc)})
         except FileNotFoundError as exc:

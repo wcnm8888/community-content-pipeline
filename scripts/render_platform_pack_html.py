@@ -188,6 +188,9 @@ def main() -> int:
         raise FileNotFoundError(f"Missing platform pack: {source}")
 
     raw_data = json.loads(source.read_text(encoding="utf-8"))
+    review_source = OUT_DIR / "platform-review-latest.json"
+    platform_review = json.loads(review_source.read_text(encoding="utf-8")) if review_source.exists() else {}
+    review_run_id = str(platform_review.get("run_id", ""))
     data = normalize_pack(raw_data)
     SITE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -199,6 +202,19 @@ def main() -> int:
         for field, label, max_len in platform["fields"]:
             field_html.append(render_field(key, field, label, fields.get(field, ""), max_len))
         steps = "".join(f"<li>{html.escape(step)}</li>" for step in platform["steps"])
+        review_item = platform_review.get("platforms", {}).get(key, {})
+        review_status = str(review_item.get("status", "not_generated"))
+        review_controls = ""
+        if review_run_id:
+            review_controls = f"""
+              <div class="platform-review" data-platform-review="{html.escape(key)}">
+                <span>平台审核状态：<strong class="platform-status">{html.escape(review_status)}</strong></span>
+                <textarea class="platform-note" placeholder="平台审核意见（可选）"></textarea>
+                <button type="button" data-platform-status="approved">平台通过</button>
+                <button type="button" data-platform-status="revision_requested">要求修改</button>
+                <button type="button" data-platform-status="rejected">平台驳回</button>
+              </div>
+            """
         sections.append(
             f"""
             <section class="platform" id="platform-{html.escape(key)}" data-platform="{html.escape(key)}">
@@ -213,6 +229,7 @@ def main() -> int:
                 <h3>发布动作</h3>
                 <ol>{steps}</ol>
               </div>
+              {review_controls}
               <div class="fields">{''.join(field_html)}</div>
             </section>
             """
@@ -371,6 +388,7 @@ def main() -> int:
     <script id="platform-pack-data" type="application/json">{automation_json}</script>
   </main>
   <script>
+    const platformReviewContext = {json.dumps({"run_id": review_run_id}, ensure_ascii=False)};
     document.querySelectorAll('button.copy').forEach((button) => {{
       button.addEventListener('click', async () => {{
         const value = button.dataset.copy || '';
@@ -378,6 +396,28 @@ def main() -> int:
         const old = button.textContent;
         button.textContent = '已复制';
         setTimeout(() => button.textContent = old, 900);
+      }});
+    }});
+    document.querySelectorAll('[data-platform-review] button[data-platform-status]').forEach((button) => {{
+      button.addEventListener('click', async () => {{
+        const panel = button.closest('[data-platform-review]');
+        const platform = panel.dataset.platformReview;
+        const note = panel.querySelector('.platform-note').value;
+        panel.querySelectorAll('button').forEach((item) => item.disabled = true);
+        try {{
+          const response = await fetch('http://localhost:8020/platform-review', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{ ...platformReviewContext, platform, status: button.dataset.platformStatus, note }})
+          }});
+          const payload = await response.json();
+          if (!response.ok || !payload.ok) throw new Error(payload.error || '保存失败');
+          panel.querySelector('.platform-status').textContent = payload.platform_review.status;
+        }} catch (error) {{
+          window.alert('平台审核保存失败：' + error.message);
+        }} finally {{
+          panel.querySelectorAll('button').forEach((item) => item.disabled = false);
+        }}
       }});
     }});
   </script>

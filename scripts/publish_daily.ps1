@@ -102,6 +102,7 @@ if ($Mode -eq "Publish") {
 
 if ($Mode -ne "DryRun") {
     Assert-HumanReviewApproved $context
+    Assert-PlatformReviewApproved $context $requestedPlatforms
 }
 
 Ensure-PublishBrowser $context
